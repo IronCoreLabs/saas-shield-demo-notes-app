@@ -20,12 +20,13 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use db::create_sqlite_tables;
-use sqlx::sqlite::SqlitePool;
+use sqlx::{migrate::MigrateDatabase, sqlite::SqlitePool, Sqlite};
 use std::time::Duration;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+const DB_URL: &str = "sqlite://sqlite.db";
 
 mod db;
 pub mod login;
@@ -33,9 +34,36 @@ pub mod notes;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
+    if !Sqlite::database_exists(DB_URL).await.unwrap_or(false) {
+        println!("Creating database {}", DB_URL);
+        match Sqlite::create_database(DB_URL).await {
+            Ok(_) => println!("Create db success"),
+            Err(error) => panic!("error: {}", error),
+        }
+    } else {
+        println!("Database already exists");
+    }
 
-    create_sqlite_tables(&pool).await?;
+    let db = SqlitePool::connect(DB_URL).await.unwrap();
+
+    let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let migrations = std::path::Path::new(&crate_dir).join("./migrations");
+
+    let migration_results = sqlx::migrate::Migrator::new(migrations)
+        .await
+        .unwrap()
+        .run(&db)
+        .await;
+
+    match migration_results {
+        Ok(_) => println!("Migration success"),
+        Err(error) => {
+            panic!("error: {}", error);
+        }
+    }
+
+    println!("migration: {:?}", migration_results);
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -68,7 +96,7 @@ async fn main() -> Result<()> {
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
         )
-        .with_state(pool);
+        .with_state(db);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:7654")
         .await
