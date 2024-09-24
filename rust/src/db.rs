@@ -19,7 +19,7 @@ pub async fn create_note(
     pool: &SqlitePool,
     note: CreateNoteRequest,
 ) -> std::result::Result<(), sqlx::Error> {
-    let mut conn = pool.acquire().await?;
+    let mut trx = pool.begin().await?;
     sqlx::query(
         "INSERT INTO note (org_id, title, body, category, edek) VALUES ($1, $2, $3, $4, $5)",
     )
@@ -28,9 +28,10 @@ pub async fn create_note(
     .bind(note.body)
     .bind(note.category)
     .bind(note.edek)
-    .execute(&mut *conn)
+    .execute(&mut *trx)
     .await?;
 
+    trx.commit().await?;
     Ok(())
 }
 

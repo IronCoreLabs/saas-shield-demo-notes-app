@@ -20,8 +20,12 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use sqlx::{migrate::MigrateDatabase, sqlite::SqlitePool, Sqlite};
-use std::time::Duration;
+use sqlx::{
+    migrate::MigrateDatabase,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool},
+    Sqlite,
+};
+use std::{str::FromStr, time::Duration};
 use tower::{BoxError, ServiceBuilder};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -44,8 +48,8 @@ async fn main() -> Result<()> {
         println!("Database already exists");
     }
 
-    let db = SqlitePool::connect(DB_URL).await.unwrap();
-
+    let options = SqliteConnectOptions::from_str(DB_URL)?.journal_mode(SqliteJournalMode::Delete);
+    let db = SqlitePool::connect_with(options).await?;
     let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let migrations = std::path::Path::new(&crate_dir).join("./migrations");
 
@@ -61,8 +65,6 @@ async fn main() -> Result<()> {
             panic!("error: {}", error);
         }
     }
-
-    println!("migration: {:?}", migration_results);
 
     tracing_subscriber::registry()
         .with(
@@ -104,5 +106,6 @@ async fn main() -> Result<()> {
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 
+    println!("Am i called?");
     Ok(())
 }
