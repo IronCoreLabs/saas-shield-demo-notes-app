@@ -1,5 +1,11 @@
 name: 'Notes-Demo'
 services:
+  tsp:
+    image: 'gcr.io/ironcore-images/tenant-security-proxy:4.14'
+    env_file:
+      - ./NotesApp.conf
+    ports:
+      - 32804:7777
   search-service:
     image: 'docker.elastic.co/elasticsearch/elasticsearch:8.12.0'
     ports:
@@ -17,27 +23,21 @@ services:
       - tsp
     volumes:
       - type: bind
-        source: ./try-cloaked-search-conf.json
+        source: ./cloaked-search-conf.json
         target: /app/deploy.json
       - type: bind
         source: ./indices
         target: /app/indices
       - type: bind
-        source: ./example.key
-        target: /secrets/cloaked-search/key1
-  tsp:
-    image: 'gcr.io/ironcore-images/tenant-security-proxy:4.14'
-    env_file:
-      - blah
-    ports:
-      - 32804:7777
+        source: ../tsp-api-key
+        target: /secrets/tsp-api-key
   s3:
     image: 'gcr.io/ironcore-images/saas-shield-s3-proxy:1.4'
     env_file:
-      - ../.s3.env
+      - ../.env.s3
     environment:
-      TSP_URL: 'tsp'
-      PROXY_DNS_NAME: 'the hostname of the VM running the S3 proxy. This is the address the clients will use to send requests to the proxy'
+      TSP_URL: 'http://tsp:7777'
+      PROXY_DNS_NAME: 's3'
     depends_on:
       - tsp
     ports:

@@ -1,0 +1,33 @@
+{
+	"id": "demo",
+	"indices": ["demo"],
+	"use_compact_search_key_id": true,
+	"tenant_id_index_field": "orgid",
+	"tenant_id_search_field": "orgid.keyword",
+	"mappings": {
+		"_encrypted_source": { "enabled": true },
+		"properties": {
+			"title": {
+				"type": "text",
+				"index_prefixes": {},
+				"analyzer": {
+					"type": "custom",
+					"tokenizer": "standard",
+					"filter": ["lowercase", "shingle"]
+				}
+			},
+			"body": {
+				"type": "text",
+				"analyzer": {
+					"type": "custom",
+					"tokenizer": "standard",
+					"filter": ["stop_words", "lowercase", "ngram"]
+				}
+			},
+			"category": {
+				"type": "text",
+				"analyzer": { "type": "custom", "tokenizer": "standard", "filter": ["lowercase", "ngram"] }
+			}
+		}
+	}
+}
