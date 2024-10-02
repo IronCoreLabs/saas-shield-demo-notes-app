@@ -1,0 +1,28 @@
+{
+  "id": "demo",
+  "indices": ["demo"],
+  "use_compact_search_key_id": true,
+  "tenant_id_index_field": "org_id",
+  "tenant_id_search_field": "org_id.keyword",
+  "mappings": {
+    "_encrypted_source": { "enabled": false },
+    "properties": {
+      "title": {
+        "type": "text",
+        "analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["stop_words", "lowercase"]
+        }
+      },
+      "body": {
+        "type": "text",
+        "analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["stop_words", "lowercase"]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+FROM llama3.2:1b
+# sets the temperature to 1 [higher is more creative, lower is more coherent]
+PARAMETER temperature 1
+
+# sets a custom system message to specify the behavior of the chat assistant
+SYSTEM You are a chatbot for a note-taking app. Briefly answer the user's question using the note text below. Keep your answer grounded in the facts of the note.

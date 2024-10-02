@@ -1,0 +1,7 @@
+{
+	"search_service_url": "http://search-service:9200",
+	"tsp_config": {
+		"url": "http://tsp:7777",
+		"api_keypath": "/secrets/tsp-api-key"
+	}
+}

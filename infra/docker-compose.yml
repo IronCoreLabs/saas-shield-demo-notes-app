@@ -1,0 +1,67 @@
+name: "notes-demo"
+services:
+  tsp:
+    image: "gcr.io/ironcore-images/tenant-security-proxy:4.14"
+    env_file:
+      - ./tsp/NotesApp.conf
+    ports:
+      - 32804:7777
+  search-service:
+    image: "docker.elastic.co/elasticsearch/elasticsearch:8.15.0"
+    ports:
+      - 9200:9200
+    environment:
+      ES_JAVA_OPTS: "-Xmx1G"
+      discovery.type: "single-node"
+      xpack.security.enabled: "false"
+  cloaked-search:
+    image: "gcr.io/ironcore-images/cloaked-search:2.8.2"
+    ports:
+      - 8675:8675
+    depends_on:
+      - search-service
+      - tsp
+    volumes:
+      - type: bind
+        source: ./cs/cloaked-search-conf.json
+        target: /app/deploy.json
+      - type: bind
+        source: ./cs/indices
+        target: /app/indices
+      - type: bind
+        source: ./tsp/tsp-api-key
+        target: /secrets/tsp-api-key
+  s3:
+    image: "gcr.io/ironcore-dev-1/saas-shield-s3-proxy:pr-225-Add-cors-support"
+    volumes:
+      # - ${PWD}/s3/application.conf:/usr/local/saas-shield-s3-proxy/conf/application.conf
+      - ${PWD}/s3/logback.xml:/usr/local/saas-shield-s3-proxy/conf/logback.xml
+    env_file:
+      - ./s3/s3-user-creds.txt
+      - ./tsp/tsp-api-key.env
+    environment:
+      TSP_URL: "http://tsp:7777"
+      S3_CONFIG_BUCKET: "icl-demo-notes-app"
+      S3_CONFIG_REGION: "us-east-1"
+      S3_CONFIG_KEY: "/tenant_mapping.conf"
+      PROXY_DNS_NAME: "s3"
+      REJECT_UNKNOWN_TENANT_ID: "false"
+      CORS_ALLOWED_ORIGIN: "http://localhost:9002"
+    depends_on:
+      - tsp
+    ports:
+      - 8080:8080
+  ollama:
+    image: "ollama/ollama"
+    deploy:
+      resources:
+        limits:
+          memory: 4gb
+        reservations:
+          memory: 3.5gb
+    volumes:
+      - type: bind
+        source: ./ollama
+        target: /root/.ollama
+    ports:
+      - 11434:11434
