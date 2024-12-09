@@ -247,7 +247,7 @@ pub async fn chat(
                 ai_sdk,
                 decrypted_note
                     .result
-                    .get(0)
+                    .first()
                     .cloned()
                     .unwrap_or_else(Note::default),
                 input,
