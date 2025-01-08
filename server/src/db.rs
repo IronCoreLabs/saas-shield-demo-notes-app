@@ -9,9 +9,12 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use futures::future::join_all;
 use ironcore_alloy::{
     deterministic::{DeterministicFieldOps, EncryptedField, EncryptedFields, PlaintextField},
-    standard::{EdekWithKeyIdHeader, EncryptedDocument, PlaintextDocument, StandardDocumentOps},
-    AlloyMetadata, DerivationPath, EncryptedBytes, FieldId, PlaintextBytes, SaasShield, SecretPath,
-    TenantId,
+    standard::{
+        EdekWithKeyIdHeader, EncryptedDocument, EncryptedDocuments, PlaintextDocument,
+        StandardDocumentOps,
+    },
+    AlloyMetadata, DerivationPath, DocumentId, EncryptedBytes, FieldId, PlaintextBytes, SaasShield,
+    SecretPath, TenantId,
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -20,6 +23,7 @@ use sqlx::{
     Sqlite, SqlitePool, Transaction,
 };
 use std::{collections::HashMap, sync::Arc, time::Duration};
+use tracing::warn;
 
 #[derive(Clone, Debug, Type, Serialize, Deserialize)]
 #[sqlx(transparent)]
@@ -30,10 +34,10 @@ impl EncryptedString {
         EncryptedString(STANDARD.encode(bytes.0))
     }
 
-    pub fn to_enc_bytes(self) -> Result<EncryptedBytes> {
+    pub fn to_enc_bytes(&self) -> Result<EncryptedBytes> {
         STANDARD
-            .decode(self.0)
-            .map(|x| EncryptedBytes(x))
+            .decode(&self.0)
+            .map(EncryptedBytes)
             .map_err(|x| x.into())
     }
 }
@@ -47,10 +51,10 @@ impl DeterministicallyEncryptedString {
         DeterministicallyEncryptedString(STANDARD.encode(bytes.0))
     }
 
-    fn to_enc_bytes(self) -> Result<EncryptedBytes> {
+    fn to_enc_bytes(&self) -> Result<EncryptedBytes> {
         STANDARD
-            .decode(self.0)
-            .map(|x| EncryptedBytes(x))
+            .decode(&self.0)
+            .map(EncryptedBytes)
             .map_err(|x| x.into())
     }
 }
@@ -77,7 +81,16 @@ pub struct NoteTable {
     pub updated: String,
 }
 
-#[derive(Debug, Clone, Default, FromRow, Serialize)]
+/// Non-encryption parts of a note
+#[derive(Clone, Debug, Serialize)]
+pub struct NoteMetadata {
+    pub id: u32,
+    pub org_id: u32,
+    pub created: String,
+    pub updated: String,
+}
+
+#[derive(Debug, Default, Clone, FromRow, Serialize)]
 pub struct Note {
     pub id: u32,
     pub category: Option<String>,
@@ -252,7 +265,7 @@ async fn encrypt_category(
     let result = match plaintext_category {
         Some(category) => Some(DeterministicallyEncryptedString::new(
             sdk.deterministic()
-                .encrypt(category, &metadata)
+                .encrypt(category, metadata)
                 .await?
                 .encrypted_field,
         )),
@@ -274,7 +287,7 @@ async fn decrypt_note(
         ]
         .into(),
     };
-    let mut decrypted = sdk.standard().decrypt(enc_document, &metadata).await?;
+    let mut decrypted = sdk.standard().decrypt(enc_document, metadata).await?;
     let dec_title = decrypted
         .0
         .remove(&FieldId("title".to_string()))
@@ -292,7 +305,7 @@ async fn decrypt_note(
                         secret_path: SecretPath("".to_string()),
                         derivation_path: DerivationPath("note/category".to_string()),
                     },
-                    &metadata,
+                    metadata,
                 )
                 .await?
                 .plaintext_field
@@ -310,6 +323,129 @@ async fn decrypt_note(
         updated: row.updated,
         attachments: vec![],
     })
+}
+
+async fn decrypt_notes(
+    rows: Vec<NoteTable>,
+    sdk: Arc<SaasShield>,
+    metadata: &AlloyMetadata,
+) -> Result<Vec<Note>> {
+    let ids = rows.iter().map(|row| row.id).collect_vec();
+    let (std_enc_documents, det_enc_documents, notes_metadata) = rows.into_iter().try_fold(
+        (HashMap::new(), HashMap::new(), HashMap::new()),
+        |(mut std_enc_map, mut det_enc_map, mut metadata_map), row| {
+            std_enc_map.insert(
+                DocumentId(row.id.to_string()),
+                EncryptedDocument {
+                    edek: EdekWithKeyIdHeader(EncryptedBytes(STANDARD.decode(row.edek)?)),
+                    document: [
+                        (FieldId("title".to_string()), row.enc_title.to_enc_bytes()?),
+                        (FieldId("body".to_string()), row.enc_body.to_enc_bytes()?),
+                    ]
+                    .into(),
+                },
+            );
+            if let Some(category) = row.category {
+                det_enc_map.insert(
+                    FieldId(row.id.to_string()),
+                    EncryptedField {
+                        encrypted_field: category.to_enc_bytes()?,
+                        secret_path: SecretPath("".to_string()),
+                        derivation_path: DerivationPath("note/category".to_string()),
+                    },
+                );
+            };
+            metadata_map.insert(
+                row.id,
+                NoteMetadata {
+                    id: row.id,
+                    org_id: row.org_id,
+                    created: row.created,
+                    updated: row.updated,
+                },
+            );
+            Ok::<_, anyhow::Error>((std_enc_map, det_enc_map, metadata_map))
+        },
+    )?;
+    let mut std_decrypted_docs = sdk
+        .standard()
+        .decrypt_batch(EncryptedDocuments(std_enc_documents), metadata)
+        .await?;
+    let mut dec_categories = sdk
+        .deterministic()
+        .decrypt_batch(EncryptedFields(det_enc_documents), metadata)
+        .await?;
+
+    let (mut successes, failures): (HashMap<_, _>, Vec<_>) = notes_metadata
+        .into_iter()
+        .map(|(doc_id, metadata)| {
+            let mut std_dec_data = std_decrypted_docs
+                .successes
+                .0
+                .remove(&DocumentId(doc_id.to_string()))
+                .ok_or(anyhow!(
+                    "ironcore_alloy couldn't decrypt note with ID `{}`",
+                    doc_id
+                ))?;
+            let dec_title = std_dec_data
+                .0
+                .remove(&FieldId("title".to_string()))
+                .ok_or(anyhow!(
+                    "ironcore_alloy couldn't decrypt title of note with ID `{}`",
+                    doc_id
+                ))?;
+            let dec_body = std_dec_data
+                .0
+                .remove(&FieldId("body".to_string()))
+                .ok_or(anyhow!(
+                    "ironcore_alloy couldn't decrypt body of note with ID `{}`",
+                    doc_id
+                ))?;
+            let maybe_category = match dec_categories
+                .successes
+                .0
+                .remove(&FieldId(doc_id.to_string()))
+            {
+                Some(category) => {
+                    Some(String::from_utf8(category.plaintext_field.0).map_err(|_| {
+                        anyhow!(
+                            "ironcore_alloy couldn't decrypt category of note with ID `{}`",
+                            doc_id
+                        )
+                    })?)
+                }
+                None => None,
+            };
+
+            Ok::<_, anyhow::Error>((
+                doc_id,
+                Note {
+                    id: doc_id,
+                    category: maybe_category,
+                    title: String::from_utf8(dec_title.0)?,
+                    body: String::from_utf8(dec_body.0)?,
+                    created: metadata.created,
+                    updated: metadata.updated,
+                    attachments: vec![], // this gets filled in later
+                },
+            ))
+        })
+        .partition_result();
+    failures
+        .into_iter()
+        .chain(
+            std_decrypted_docs
+                .failures
+                .into_values()
+                .chain(dec_categories.failures.into_values())
+                .map(|e| e.into()),
+        )
+        .for_each(|failure| warn!("Failed to decrypt note on list call: {}", failure));
+    let sorted_result = ids
+        .into_iter()
+        .flat_map(|id| successes.remove(&id))
+        .collect();
+    Ok(sorted_result)
 }
 
 pub async fn create_attachment(
@@ -465,7 +601,7 @@ pub async fn get_note(
             .await?;
             get_attachments_and_create_info(decrypted_note, organization, pool, aws_sdk)
                 .await
-                .map(|note| Some(note))
+                .map(Some)
         }
         None => Ok(None),
     }
@@ -526,15 +662,7 @@ pub async fn list_notes(
     };
 
     let db_result = query.fetch_all(&mut *conn).await?;
-    // TODO This really should do something smarter than this. We should use 2 batch calls total instead of doing 2 calls per note. This is ok for the demo though.
-    let decrypted_notes: Vec<Note> = join_all(
-        db_result
-            .into_iter()
-            .map(|row| decrypt_note(row, sdk.clone(), &metadata)),
-    )
-    .await
-    .into_iter()
-    .collect::<Result<_>>()?;
+    let decrypted_notes = decrypt_notes(db_result, sdk, &metadata).await?;
 
     let result = join_all(
         decrypted_notes
@@ -568,19 +696,11 @@ pub async fn search_notes(
 
     let db_result = query.fetch_all(&mut *conn).await?;
     let metadata = AlloyMetadata::new_simple(TenantId(org.0.login.clone()));
-    // TODO This really should do something smarter than this. We should use 2 batch calls total instead of doing 2 calls per note. This is ok for the demo though.
-    let decrypted_notes = join_all(
-        db_result
-            .into_iter()
-            .map(|row| decrypt_note(row, sdk.clone(), &metadata)),
-    )
-    .await
-    .into_iter()
-    .collect::<Result<Vec<_>>>()?;
+    let decrypted_notes = decrypt_notes(db_result, sdk, &metadata).await?;
     let result = join_all(
         decrypted_notes
             .into_iter()
-            .map(|note| get_attachments_and_create_info(note, &org, pool, aws_sdk.clone())),
+            .map(|note| get_attachments_and_create_info(note, org, pool, aws_sdk.clone())),
     )
     .await
     .into_iter()
@@ -634,8 +754,8 @@ pub async fn list_categories(
     let decrypted_strings = decrypted
         .successes
         .0
-        .into_iter()
-        .map(|(_, field_value)| String::from_utf8(field_value.plaintext_field.0).unwrap())
+        .into_values()
+        .map(|field_value| String::from_utf8(field_value.plaintext_field.0).unwrap())
         .sorted()
         .collect();
     Ok(decrypted_strings)
