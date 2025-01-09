@@ -1,0 +1,2 @@
+# Replace the two values inside the `<>` below, remove this comment line, and save as `s3-user-creds.txt`.
+S3_CREDENTIALS='{"<access-key>":{secret-key:"<secret-key>"}}'

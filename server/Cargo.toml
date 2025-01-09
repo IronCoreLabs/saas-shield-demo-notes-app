@@ -6,30 +6,35 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.89"
-aws-config = { version = "1.1.7", features = ["behavior-version-latest", "rustls"] }
-aws-sdk-s3 = { version = "1.51.0", features = [ "rustls" ] }
+aws-config = { version = "1.1.7", features = [
+    "behavior-version-latest",
+    "rustls",
+] }
+aws-sdk-s3 = { version = "1.51.0", features = ["rustls"] }
 axum = { version = "0.7" }
 axum-extra = { version = "0.9.4", features = ["cookie"] }
 base64 = "0.22.1"
 chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3.30"
 elasticsearch = { version = "8.15.0-alpha.1", default-features = false, features = [
-  "rustls-tls",
+    "rustls-tls",
 ] }
-ironcore-alloy = { git = "https://github.com/IronCoreLabs/ironcore-alloy", branch = "main" }
-itertools = "0.13.0"
+ironcore-alloy = "0.11.2"
+itertools = "0.14.0"
+ollama-rs = { version = "0.2.1", default-features = false, features = [
+    "rustls",
+] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.128"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = { version = "0.4", features = ["util", "timeout"] }
 tower-http = { version = "0.5.0", features = [
-  "add-extension",
-  "trace",
-  "cors",
-  "normalize-path",
+    "add-extension",
+    "trace",
+    "cors",
+    "normalize-path",
 ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.0", features = ["serde", "v4"] }
-serde_json = "1.0.128"
-ollama-rs = { version = "0.2.1", features = [ "rustls" ] }

@@ -14,7 +14,6 @@
         (google-cloud-sdk.withExtraComponents [google-cloud-sdk.components.gke-gcloud-auth-plugin])
         docker-credential-gcr
         docker-credential-helpers
-        awscli2
         ollama
         docker
       ];
