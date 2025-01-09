@@ -18,11 +18,13 @@ or create your own using the steps below.
 
 ## Running the docker containers
 
-From the `infra` folder: `docker-compose -f ./docker-compose.yml up`
+From the `infra` folder:
 
-### Setting up Ollama for AI models
+```
+docker-compose -f ./docker-compose.yml up
+```
 
-You'll need to download the AI models. From the `infra` directory after the containers are running:
+You'll then need to download the AI models. After the containers are running:
 
 ```
 export OLLAMA_HOST=127.0.0.1:11434

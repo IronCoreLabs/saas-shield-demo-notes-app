@@ -11,5 +11,5 @@
 To build and run the application at `http://localhost:9002`:
 
 ```
-trunk serve --port=9002
+trunk serve --port=9002 --release
 ```
