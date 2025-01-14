@@ -3,6 +3,7 @@
 ## Required Software
 
 - Docker
+  - Because of the performance needs of Ollama, we recommend you configure Docker with at least 4 CPUs and 6GB of memory.
 - Docker Compose
 
 ## Configuration files
