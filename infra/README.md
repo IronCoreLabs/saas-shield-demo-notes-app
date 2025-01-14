@@ -34,3 +34,16 @@ ollama create llama-demo -f ./ollama/Modelfile
 ```
 
 If you want to test out the model and make sure the ollama service is working, try `ollama run llama3.2:1b` and when a prompt appears just ask it a question.
+
+## Running services
+
+The services will be accessible at the given host/ports. It's not necessary to know these to run the demo, but you can interact with them directly to
+explore details of the encryption. For example, you can interact with the `demo` index in Elasticsearch to see that document bodies and titles are protected.
+
+| Service        | host:port       |
+| -------------- | --------------- |
+| TSP            | localhost:7777  |
+| Elasticsearch  | localhost:9200  |
+| Cloaked Search | localhost:8675  |
+| S3 proxy       | localhost:8080  |
+| Ollama         | localhost:11434 |
