@@ -17,19 +17,12 @@ server/sqlite.db*
 .DS_Store
 Thumbs.db
 
-# Env
-.env
-.env.*
-!.env.example
-!.env.test
-
 # Unencrypted secrets
-infra/tsp/NotesApp.conf
+infra/tsp/service-account.conf
 infra/tsp/tsp-api-key
-infra/tsp/tsp-api-key.env
 infra/s3/s3-user-creds.txt
 infra/cb-accts.txt
-server/env
+server/server.conf
 
 # Ignore giant models
 infra/ollama

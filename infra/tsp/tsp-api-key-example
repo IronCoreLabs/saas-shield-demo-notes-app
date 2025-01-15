@@ -1,0 +1,2 @@
+# This file should be a single line, just containing the API key provided by the Configuration Broker (or from provided credentials).
+# It should match the API_KEY in `NodesApp.conf`. Name this file `tsp-api-key`.
