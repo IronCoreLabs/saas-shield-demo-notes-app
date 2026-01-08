@@ -10,7 +10,7 @@ aws-config = { version = "1.1.7", features = [
     "behavior-version-latest",
     "rustls",
 ] }
-aws-sdk-s3 = { version = "1.51.0", features = ["rustls"] }
+aws-sdk-s3 = { version = "1.98.0", features = ["rustls"] }
 axum = { version = "0.7" }
 axum-extra = { version = "0.9.4", features = ["cookie"] }
 base64 = "0.22.1"
